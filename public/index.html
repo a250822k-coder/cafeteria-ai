@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>食堂AIアバター受付</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #252837;
+    --accent: #4fc3f7;
+    --accent2: #81d4fa;
+    --green: #69f0ae;
+    --red: #ff6b6b;
+    --yellow: #ffd54f;
+    --text: #e8eaf6;
+    --muted: #7986cb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,195,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,195,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    text-align: center;
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid rgba(79,195,247,0.15);
+    background: rgba(26,29,39,0.9);
+    backdrop-filter: blur(10px);
+  }
+
+  header h1 {
+    font-family: 'Kaisei Decol', serif;
+    font-size: clamp(20px, 4vw, 28px);
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    text-shadow: 0 0 20px rgba(79,195,247,0.4);
+  }
+
+  header p { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .main-layout {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 24px 16px;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  /* ── AVATAR ── */
+  .avatar-panel {
+    flex: 0 0 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 24px;
+  }
+
+  .avatar-container { position: relative; width: 200px; height: 240px; }
+
+  .avatar-ring {
+    position: absolute;
+    bottom: -10px; left: 50%;
+    transform: translateX(-50%);
+    width: 140px; height: 30px;
+    background: radial-gradient(ellipse, rgba(79,195,247,0.4) 0%, transparent 70%);
+    border-radius: 50%;
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes ringPulse {
+    0%,100% { opacity:.5; transform:translateX(-50%) scaleX(1); }
+    50%      { opacity:1;  transform:translateX(-50%) scaleX(1.15); }
+  }
+
+  #avatarSvg {
+    width: 200px; height: 240px;
+    filter: drop-shadow(0 8px 24px rgba(79,195,247,0.3));
+    transition: transform 0.3s;
+  }
+
+  .avatar-container:hover #avatarSvg { transform: translateY(-4px); }
+
+  .talking  #avatarSvg { animation: talking  0.4s ease-in-out infinite alternate; }
+  .listening #avatarSvg { animation: listening 1s  ease-in-out infinite; }
+
+  @keyframes talking   { from{transform:translateY(0) rotate(-0.5deg)} to{transform:translateY(-3px) rotate(0.5deg)} }
+  @keyframes listening { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+
+  .avatar-status {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface);
+    border: 1px solid rgba(79,195,247,0.2);
+    border-radius: 20px; padding: 6px 16px;
+    font-size: 13px; color: var(--accent2);
+    min-width: 150px; justify-content: center;
+  }
+
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); animation:dotPulse 2s ease-in-out infinite; }
+  @keyframes dotPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+  .status-dot.recording { background:var(--red); animation:dotBlink .5s ease-in-out infinite; }
+  @keyframes dotBlink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .status-dot.thinking { background:var(--yellow); animation:dotSpin 1s linear infinite; }
+  @keyframes dotSpin { 0%{box-shadow:0 0 0 0 rgba(255,213,79,.6)} 100%{box-shadow:0 0 0 8px rgba(255,213,79,0)} }
+
+  .speech-bubble {
+    position: relative;
+    background: var(--surface2);
+    border: 1px solid rgba(79,195,247,0.25);
+    border-radius: 16px; padding: 14px 16px;
+    font-size: 14px; line-height: 1.6;
+    max-width: 260px; min-height: 80px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+
+  .speech-bubble::before {
+    content:''; position:absolute; top:-10px; left:50%; transform:translateX(-50%);
+    border:10px solid transparent; border-bottom-color:rgba(79,195,247,0.25); border-top:none;
+  }
+  .speech-bubble::after {
+    content:''; position:absolute; top:-8px; left:50%; transform:translateX(-50%);
+    border:9px solid transparent; border-bottom-color:var(--surface2); border-top:none;
+  }
+
+  .sound-waves { display:flex; align-items:center; justify-content:center; gap:3px; height:20px; opacity:0; transition:opacity .3s; }
+  .sound-waves.active { opacity:1; }
+  .wave-bar { width:3px; background:var(--accent); border-radius:2px; animation:wave 1.2s ease-in-out infinite; }
+  .wave-bar:nth-child(1){animation-delay:0s;height:8px}
+  .wave-bar:nth-child(2){animation-delay:.1s;height:14px}
+  .wave-bar:nth-child(3){animation-delay:.2s;height:18px}
+  .wave-bar:nth-child(4){animation-delay:.3s;height:14px}
+  .wave-bar:nth-child(5){animation-delay:.4s;height:8px}
+  @keyframes wave { 0%,100%{transform:scaleY(.5);opacity:.5} 50%{transform:scaleY(1);opacity:1} }
+
+  /* ── RIGHT ── */
+  .right-panel { flex:1; display:flex; flex-direction:column; gap:20px; min-width:0; }
+
+  .tabs {
+    display:flex; gap:4px; background:var(--surface);
+    border-radius:12px; padding:4px;
+    border:1px solid rgba(79,195,247,0.1);
+  }
+
+  .tab-btn {
+    flex:1; padding:10px 16px; border:none; background:transparent;
+    color:var(--muted); border-radius:8px; cursor:pointer;
+    font-family:'Noto Sans JP',sans-serif; font-size:13px; font-weight:500; transition:all .2s;
+  }
+  .tab-btn.active { background:var(--accent); color:var(--bg); font-weight:700; }
+
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* ── CHAT ── */
+  .chat-panel { background:var(--surface); border:1px solid rgba(79,195,247,0.1); border-radius:16px; overflow:hidden; }
+
+  .chat-history {
+    height:340px; overflow-y:auto; padding:16px;
+    display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth;
+  }
+  .chat-history::-webkit-scrollbar { width:4px; }
+  .chat-history::-webkit-scrollbar-thumb { background:var(--muted); border-radius:2px; }
+
+  .chat-msg { display:flex; gap:8px; animation:msgIn .3s ease-out; }
+  @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .chat-msg.user { flex-direction:row-reverse; }
+
+  .msg-avatar {
+    width:32px; height:32px; border-radius:50%; background:var(--surface2);
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+    flex-shrink:0; border:1px solid rgba(79,195,247,0.2);
+  }
+
+  .msg-bubble { max-width:75%; padding:10px 14px; border-radius:14px; font-size:14px; line-height:1.6; }
+  .chat-msg.ai   .msg-bubble { background:var(--surface2); border:1px solid rgba(79,195,247,0.15); border-bottom-left-radius:4px; }
+  .chat-msg.user .msg-bubble { background:var(--accent); color:var(--bg); border-bottom-right-radius:4px; font-weight:500; }
+
+  .quick-questions {
+    display:flex; gap:8px; padding:10px 16px;
+    border-top:1px solid rgba(79,195,247,0.08); overflow-x:auto;
+    background:var(--surface2); flex-wrap:wrap;
+  }
+
+  .quick-q {
+    background:rgba(79,195,247,0.08); border:1px solid rgba(79,195,247,0.2);
+    border-radius:20px; padding:5px 12px; font-size:12px; color:var(--accent2);
+    cursor:pointer; white-space:nowrap; transition:all .2s;
+    font-family:'Noto Sans JP',sans-serif;
+  }
+  .quick-q:hover { background:rgba(79,195,247,0.15); }
+
+  .chat-input-area {
+    padding:12px 16px; border-top:1px solid rgba(79,195,247,0.1);
+    display:flex; gap:8px; align-items:center; background:var(--surface2);
+  }
+
+  .chat-input {
+    flex:1; background:var(--bg); border:1px solid rgba(79,195,247,0.2);
+    border-radius:10px; padding:10px 14px; color:var(--text);
+    font-family:'Noto Sans JP',sans-serif; font-size:14px; outline:none; transition:border-color .2s;
+  }
+  .chat-input:focus { border-color:var(--accent); }
+  .chat-input::placeholder { color:var(--muted); }
+
+  .btn { border:none; border-radius:10px; cursor:pointer; font-family:'Noto Sans JP',sans-serif; font-weight:700; transition:all .2s; display:flex; align-items:center; gap:6px; }
+  .btn-primary { background:var(--accent); color:var(--bg); padding:10px 18px; font-size:14px; }
+  .btn-primary:hover { background:var(--accent2); transform:translateY(-1px); }
+  .btn-primary:disabled { background:var(--surface2); color:var(--muted); cursor:not-allowed; transform:none; }
+  .btn-mic { background:var(--surface); color:var(--accent); padding:10px 14px; font-size:18px; border:1px solid rgba(79,195,247,0.3); }
+  .btn-mic:hover { background:rgba(79,195,247,0.1); }
+  .btn-mic.recording { background:rgba(255,107,107,0.2); color:var(--red); border-color:var(--red); animation:micPulse .5s ease-in-out infinite alternate; }
+  @keyframes micPulse { from{box-shadow:0 0 0 0 rgba(255,107,107,.4)} to{box-shadow:0 0 0 6px rgba(255,107,107,0)} }
+
+  /* ── MENU SETTINGS ── */
+  .menu-settings { background:var(--surface); border:1px solid rgba(79,195,247,0.1); border-radius:16px; padding:20px; }
+  .menu-settings h3 { font-family:'Kaisei Decol',serif; font-size:16px; color:var(--accent); margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid rgba(79,195,247,0.1); }
+
+  .menu-items { display:flex; flex-direction:column; gap:12px; max-height:350px; overflow-y:auto; padding-right:4px; }
+  .menu-items::-webkit-scrollbar { width:4px; }
+  .menu-items::-webkit-scrollbar-thumb { background:var(--muted); border-radius:2px; }
+
+  .menu-item-card { background:var(--surface2); border:1px solid rgba(79,195,247,0.08); border-radius:12px; padding:14px; position:relative; }
+
+  .menu-item-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .input-group { display:flex; flex-direction:column; gap:4px; }
+  .input-group label { font-size:11px; color:var(--muted); font-weight:500; }
+  .input-full { grid-column:1 / -1; }
+
+  .menu-input { background:var(--bg); border:1px solid rgba(79,195,247,0.2); border-radius:8px; padding:8px 12px; color:var(--text); font-family:'Noto Sans JP',sans-serif; font-size:13px; outline:none; transition:border-color .2s; width:100%; }
+  .menu-input:focus { border-color:var(--accent); }
+
+  .btn-remove { position:absolute; top:10px; right:10px; background:rgba(255,107,107,0.15); color:var(--red); border:none; border-radius:6px; width:26px; height:26px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; transition:background .2s; }
+  .btn-remove:hover { background:rgba(255,107,107,0.3); }
+
+  .btn-add { background:rgba(105,240,174,0.1); color:var(--green); border:1px dashed rgba(105,240,174,0.3); border-radius:10px; padding:10px; width:100%; cursor:pointer; font-family:'Noto Sans JP',sans-serif; font-size:13px; font-weight:500; transition:all .2s; margin-top:4px; }
+  .btn-add:hover { background:rgba(105,240,174,0.2); }
+
+  .admin-section { margin-top:12px; padding-top:12px; border-top:1px solid rgba(79,195,247,0.1); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .admin-input { background:var(--bg); border:1px solid rgba(79,195,247,0.2); border-radius:8px; padding:9px 14px; color:var(--text); font-family:monospace; font-size:13px; outline:none; width:180px; }
+  .admin-input:focus { border-color:var(--accent); }
+  .btn-save { background:var(--green); color:var(--bg); padding:10px 20px; font-size:13px; font-weight:700; }
+  .btn-save:hover { filter:brightness(1.1); transform:translateY(-1px); }
+  .save-msg { font-size:12px; opacity:0; transition:opacity .3s; }
+  .save-msg.ok  { color:var(--green); }
+  .save-msg.err { color:var(--red); }
+  .save-msg.show { opacity:1; }
+
+  .typing-indicator { display:flex; gap:4px; padding:10px 14px; align-items:center; }
+  .typing-dot { width:6px; height:6px; background:var(--accent); border-radius:50%; animation:typingBounce 1.2s ease-in-out infinite; }
+  .typing-dot:nth-child(2){animation-delay:.2s} .typing-dot:nth-child(3){animation-delay:.4s}
+  @keyframes typingBounce { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-5px);opacity:1} }
+
+  @media (max-width:700px) {
+    .main-layout { flex-direction:column; padding:12px; }
+    .avatar-panel { flex:none; width:100%; flex-direction:row; align-items:flex-start; gap:12px; position:static; }
+    .avatar-container { width:120px; height:145px; }
+    #avatarSvg { width:120px; height:145px; }
+    .speech-bubble { max-width:calc(100% - 140px); min-height:60px; font-size:13px; }
+    .avatar-ring { display:none; }
+    .speech-bubble::before { top:30px; left:-9px; border:9px solid transparent; border-right-color:rgba(79,195,247,0.25); border-left:none; }
+    .speech-bubble::after  { top:32px; left:-7px; border:8px solid transparent; border-right-color:var(--surface2); border-left:none; }
+    .avatar-status { align-self:flex-end; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍱 食堂AIアバター受付</h1>
+  <p>メニューについて何でもお気軽にお尋ねください</p>
+</header>
+
+<div class="main-layout">
+  <!-- AVATAR -->
+  <div class="avatar-panel" id="avatarPanel">
+    <div class="avatar-container">
+      <div class="avatar-ring"></div>
+      <svg id="avatarSvg" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+        <rect x="55" y="140" width="90" height="85" rx="12" fill="#1976d2"/>
+        <path d="M75 145 L75 220 L125 220 L125 145 Z" fill="white" opacity="0.85"/>
+        <rect x="88" y="140" width="10" height="30" rx="4" fill="white" opacity="0.85"/>
+        <rect x="102" y="140" width="10" height="30" rx="4" fill="white" opacity="0.85"/>
+        <rect x="83" y="178" width="34" height="22" rx="4" fill="none" stroke="#1976d2" stroke-width="1.5" opacity="0.5"/>
+        <rect x="25" y="145" width="34" height="22" rx="10" fill="#1976d2"/>
+        <rect x="141" y="145" width="34" height="22" rx="10" fill="#1976d2"/>
+        <ellipse cx="38" cy="170" rx="12" ry="10" fill="#f5c5a3"/>
+        <ellipse cx="162" cy="170" rx="12" ry="10" fill="#f5c5a3"/>
+        <rect x="88" y="124" width="24" height="22" rx="6" fill="#f5c5a3"/>
+        <ellipse cx="100" cy="100" rx="46" ry="50" fill="#f5c5a3"/>
+        <ellipse cx="100" cy="68" rx="46" ry="28" fill="#4a3728"/>
+        <ellipse cx="56" cy="90" rx="12" ry="22" fill="#4a3728"/>
+        <ellipse cx="144" cy="90" rx="12" ry="22" fill="#4a3728"/>
+        <path d="M60 72 Q100 45 140 72" fill="#4a3728" stroke="#4a3728" stroke-width="2"/>
+        <path d="M68 75 Q80 60 100 68 Q120 60 132 75" fill="#4a3728"/>
+        <ellipse cx="55" cy="102" rx="9" ry="10" fill="#f5c5a3"/>
+        <ellipse cx="145" cy="102" rx="9" ry="10" fill="#f5c5a3"/>
+        <ellipse cx="83" cy="102" rx="9" ry="10" fill="white"/>
+        <ellipse cx="117" cy="102" rx="9" ry="10" fill="white"/>
+        <ellipse cx="84" cy="104" rx="6" ry="7" fill="#3a2a1a"/>
+        <ellipse cx="118" cy="104" rx="6" ry="7" fill="#3a2a1a"/>
+        <circle cx="86" cy="101" r="2" fill="white"/>
+        <circle cx="120" cy="101" r="2" fill="white"/>
+        <path d="M75 92 Q83 88 91 92" stroke="#4a3728" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M109 92 Q117 88 125 92" stroke="#4a3728" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <ellipse cx="100" cy="114" rx="4" ry="3" fill="#e8a882"/>
+        <path id="mouthPath" d="M88 124 Q100 132 112 124" stroke="#c47a5a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <ellipse cx="70" cy="116" rx="10" ry="6" fill="#ffb3b3" opacity="0.5"/>
+        <ellipse cx="130" cy="116" rx="10" ry="6" fill="#ffb3b3" opacity="0.5"/>
+        <path d="M82 138 L88 155 L100 148 L112 155 L118 138" fill="white" opacity="0.9"/>
+        <rect x="78" y="163" width="44" height="16" rx="4" fill="#e3f2fd"/>
+        <text x="100" y="175" text-anchor="middle" font-size="7" fill="#1976d2" font-weight="bold" font-family="sans-serif">食堂スタッフ</text>
+      </svg>
+    </div>
+
+    <div class="avatar-status" id="avatarStatus">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">待機中</span>
+    </div>
+
+    <div style="width:100%">
+      <div class="sound-waves" id="soundWaves">
+        <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div>
+      </div>
+      <div class="speech-bubble">
+        <div id="speechText">こんにちは！食堂スタッフのAIです。メニューについてのご質問は何でもどうぞ！アレルギーや食材についてもお答えします。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('chat',this)">💬 会話</button>
+      <button class="tab-btn" onclick="switchTab('settings',this)">📋 メニュー設定</button>
+    </div>
+
+    <!-- CHAT TAB -->
+    <div class="tab-content active" id="tab-chat">
+      <div class="chat-panel">
+        <div class="chat-history" id="chatHistory">
+          <div class="chat-msg ai">
+            <div class="msg-avatar">🧑‍🍳</div>
+            <div class="msg-bubble">こんにちは！食堂スタッフのAIです。メニューについてのご質問は何でもどうぞ！</div>
+          </div>
+        </div>
+        <div class="quick-questions">
+          <button class="quick-q" onclick="sendQuickQ(this)">今日のメニューは？</button>
+          <button class="quick-q" onclick="sendQuickQ(this)">卵アレルギーに対応したメニューは？</button>
+          <button class="quick-q" onclick="sendQuickQ(this)">一番安いメニューは？</button>
+          <button class="quick-q" onclick="sendQuickQ(this)">ベジタリアン向けは？</button>
+          <button class="quick-q" onclick="sendQuickQ(this)">小麦アレルギーは？</button>
+        </div>
+        <div class="chat-input-area">
+          <button class="btn btn-mic" id="micBtn" onclick="toggleMic()" title="音声入力">🎤</button>
+          <input class="chat-input" id="chatInput" type="text" placeholder="質問を入力してください..." onkeydown="if(event.key==='Enter')sendMessage()"/>
+          <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">送信</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div class="tab-content" id="tab-settings">
+      <div class="menu-settings">
+        <h3>🍽️ メニュー情報を編集</h3>
+        <div class="menu-items" id="menuItems"><p style="color:var(--muted);font-size:13px">読み込み中...</p></div>
+        <button class="btn-add" onclick="addMenuItem()">＋ メニューを追加</button>
+        <div class="admin-section">
+          <input class="admin-input" type="password" id="adminSecret" placeholder="管理用パスワード"/>
+          <button class="btn btn-primary btn-save" onclick="saveMenu()">💾 サーバーに保存</button>
+          <span class="save-msg" id="saveMsg"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let menuData = [];
+let isRecording = false;
+let recognition = null;
+
+// ── 起動時にメニューをサーバーから取得 ──
+async function loadMenu() {
+  try {
+    const res = await fetch('/api/menu');
+    menuData = await res.json();
+    renderMenuItems();
+  } catch(e) {
+    console.error('メニュー取得失敗', e);
+  }
+}
+
+// ── タブ切替 ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ── メニュー描画 ──
+function renderMenuItems() {
+  const c = document.getElementById('menuItems');
+  c.innerHTML = '';
+  menuData.forEach((item, i) => {
+    c.innerHTML += `
+      <div class="menu-item-card">
+        <button class="btn-remove" onclick="removeItem(${i})">✕</button>
+        <div class="menu-item-fields">
+          <div class="input-group input-full">
+            <label>商品名</label>
+            <input class="menu-input" value="${item.name}" placeholder="例: 日替わり定食" oninput="menuData[${i}].name=this.value"/>
+          </div>
+          <div class="input-group">
+            <label>価格（円）</label>
+            <input class="menu-input" value="${item.price}" placeholder="550" oninput="menuData[${i}].price=this.value"/>
+          </div>
+          <div class="input-group">
+            <label>使用食材</label>
+            <input class="menu-input" value="${item.ingredients}" placeholder="鶏肉・米・野菜" oninput="menuData[${i}].ingredients=this.value"/>
+          </div>
+          <div class="input-group input-full">
+            <label>アレルギー食品</label>
+            <input class="menu-input" value="${item.allergens}" placeholder="小麦・卵" oninput="menuData[${i}].allergens=this.value"/>
+          </div>
+        </div>
+      </div>`;
+  });
+}
+
+function addMenuItem() {
+  menuData.push({ name:'', price:'', ingredients:'', allergens:'' });
+  renderMenuItems();
+  setTimeout(() => { const el = document.getElementById('menuItems'); el.scrollTop = el.scrollHeight; }, 50);
+}
+
+function removeItem(i) { menuData.splice(i, 1); renderMenuItems(); }
+
+async function saveMenu() {
+  const secret = document.getElementById('adminSecret').value;
+  const msg = document.getElementById('saveMsg');
+  msg.className = 'save-msg';
+  try {
+    const res = await fetch('/api/menu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+      body: JSON.stringify(menuData),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    msg.textContent = '✓ 保存しました';
+    msg.className = 'save-msg ok show';
+  } catch(e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className = 'save-msg err show';
+  }
+  setTimeout(() => msg.classList.remove('show'), 3000);
+}
+
+// ── チャット ──
+function setStatus(status) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  const panel = document.getElementById('avatarPanel');
+  const waves = document.getElementById('soundWaves');
+  dot.className = 'status-dot'; panel.className = 'avatar-panel'; waves.className = 'sound-waves';
+  if (status === 'thinking') { dot.classList.add('thinking'); txt.textContent = '考え中...'; }
+  else if (status === 'talking') { panel.classList.add('talking'); waves.classList.add('active'); txt.textContent = 'お答え中'; }
+  else if (status === 'listening') { dot.classList.add('recording'); panel.classList.add('listening'); txt.textContent = '聞いています'; }
+  else txt.textContent = '待機中';
+}
+
+function setSpeech(t) { document.getElementById('speechText').textContent = t; }
+
+function addMsg(role, text) {
+  const h = document.getElementById('chatHistory');
+  const d = document.createElement('div');
+  d.className = 'chat-msg ' + role;
+  d.innerHTML = `<div class="msg-avatar">${role==='ai'?'🧑‍🍳':'🙋'}</div><div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
+  h.appendChild(d); h.scrollTop = h.scrollHeight;
+}
+
+function showTyping() {
+  const h = document.getElementById('chatHistory');
+  const d = document.createElement('div');
+  d.className = 'chat-msg ai'; d.id = 'typing';
+  d.innerHTML = '<div class="msg-avatar">🧑‍🍳</div><div class="msg-bubble"><div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div></div>';
+  h.appendChild(d); h.scrollTop = h.scrollHeight;
+}
+
+function removeTyping() { const t = document.getElementById('typing'); if(t) t.remove(); }
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  addMsg('user', q);
+  document.getElementById('sendBtn').disabled = true;
+  showTyping(); setStatus('thinking'); setSpeech('考え中...');
+
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q }),
+    });
+    const data = await res.json();
+    removeTyping();
+    if (!res.ok) throw new Error(data.error);
+    addMsg('ai', data.answer);
+    setSpeech(data.answer);
+    setStatus('talking');
+    speak(data.answer, () => setStatus('idle'));
+  } catch(e) {
+    removeTyping();
+    addMsg('ai', 'すみません、エラーが発生しました: ' + e.message);
+    setSpeech('エラーが発生しました'); setStatus('idle');
+  }
+  document.getElementById('sendBtn').disabled = false;
+}
+
+function sendQuickQ(btn) { document.getElementById('chatInput').value = btn.textContent; sendMessage(); }
+
+function speak(text, onEnd) {
+  if (!window.speechSynthesis) { if(onEnd) onEnd(); return; }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP'; u.rate = 1.05; u.pitch = 1.1;
+  const voices = window.speechSynthesis.getVoices();
+  const ja = voices.find(v => v.lang.startsWith('ja'));
+  if (ja) u.voice = ja;
+  u.onend = () => { if(onEnd) onEnd(); };
+  u.onerror = () => { if(onEnd) onEnd(); };
+  window.speechSynthesis.speak(u);
+}
+
+function toggleMic() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert('このブラウザは音声認識に対応していません。ChromeまたはEdgeをご利用ください。');
+    return;
+  }
+  const micBtn = document.getElementById('micBtn');
+  if (isRecording) { recognition.stop(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = 'ja-JP'; recognition.continuous = false; recognition.interimResults = true;
+  recognition.onstart = () => { isRecording = true; micBtn.classList.add('recording'); micBtn.textContent = '⏹️'; setStatus('listening'); setSpeech('お話しください...'); };
+  recognition.onresult = (e) => { document.getElementById('chatInput').value = Array.from(e.results).map(r=>r[0].transcript).join(''); };
+  recognition.onend = () => { isRecording = false; micBtn.classList.remove('recording'); micBtn.textContent = '🎤'; setStatus('idle'); const q = document.getElementById('chatInput').value.trim(); if(q) sendMessage(); };
+  recognition.onerror = () => { isRecording = false; micBtn.classList.remove('recording'); micBtn.textContent = '🎤'; setStatus('idle'); };
+  recognition.start();
+}
+
+if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+loadMenu();
+</script>
+</body>
+</html>
